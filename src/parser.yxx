@@ -1,0 +1,235 @@
+%language "C++"
+%define api.token.constructor
+%define api.value.type variant
+%define parse.assert
+//%glr-parser
+%code requires
+{
+#define YY_NULLPTR nullptr
+class Parser;
+}
+// The parsing context.
+%param { Parser& parserDriver }
+
+%define parse.trace
+%define parse.error verbose
+%code requires
+{
+#include "src/AST/Declarations.hxx"
+#include "src/AST/utils.hxx"
+}
+%code
+{
+#include "src/Parser.hxx"
+}
+%define api.token.prefix {TOK_}
+
+%token END 0
+%token LPAREN "("
+%token RPAREN ")"
+%token PLUS "+"
+%token STAR "*"
+%token EQUAL "="
+%token UNIFY "==="
+%token EVAL "$"
+%token BACKTICK "`"
+%token OR "||"
+%token AND "&&"
+%token EQUALEQUAL "=="
+%token NOTEQUAL "!="
+%token LESS "<"
+%token GREATER ">"
+%token LESSEQUAL "<="
+%token GREATEREQUAL ">="
+%token MINUS "-"
+%token SLASH "/"
+%token PROCENT "%"
+%token NOT "!"
+%token AMPERSAND "&"
+%token STRUCT "struct"
+%token LBRACE "{"
+%token RBRACE "}"
+%token SEMICOLON ";"
+%token COMMA ","
+%token VOID "void"
+%token DECLARATIVE_DEFINE ":-"
+%token DOT "."
+%token BREAK "break"
+%token CONTINUE "continue"
+%token IF "if"
+%token ELSE "else"
+%token FOR "for"
+%token EXTERN "extern"
+%token C_STRING "\"C\""
+%token TRUE "true"
+%token FALSE "false"
+%token <std::string> ID
+%token <std::string> DECIMAL
+
+%token DUMMY
+
+%type <std::shared_ptr<Module>> unit
+%type <std::shared_ptr<Module>> module
+%type <std::shared_ptr<FunctionDefinition>> function-definition
+%type <std::shared_ptr<RecordDefinition>> record-definition
+%type <std::vector<std::pair<std::shared_ptr<Type>, std::string>>> record-definition-term-declaration-list
+%type <std::pair<std::shared_ptr<Type>, std::string>> type_ID
+%type <std::shared_ptr<FunctionDefinitionDeclarative>> function-definition-declarative
+%type <std::vector<std::shared_ptr<Expression>>> term-list
+%type <std::shared_ptr<Expression>> term
+%type <std::shared_ptr<FunctionDefinitionImperative>> function-definition-imperative
+%type <std::shared_ptr<FunctionBody>> function-body
+%type <std::shared_ptr<FunctionBodyDeclarative>> function-body-declarative
+%type <std::vector<std::shared_ptr<Expression>>> expr-or-type_ID-list
+%type <std::vector<std::shared_ptr<Expression>>> expr-or-type_ID-list-tail
+%type <std::shared_ptr<Expression>> expr
+%type <std::shared_ptr<LiteralExpression>> literal-expr
+%type <std::shared_ptr<FunctionBodyImperative>> function-body-imperative
+%type <std::vector<std::shared_ptr<Statement>>> statement-list
+%type <std::shared_ptr<Statement>> statement
+%type <std::shared_ptr<IfStatement>> statement-if
+%type <std::shared_ptr<ForStatement>> statement-for
+%type <std::shared_ptr<FunctionBodyExtern>> function-body-extern
+
+%left "==="
+%right "="
+%right "$" "`"
+%left "||"
+%left "&&"
+%left "==" "!="
+%left "<" ">" "<=" ">="
+%left "+" "-"
+%left "*" "/" "%"
+%right "!" UMINUS USTAR "&"
+%left "."
+
+%%
+
+unit: module END {parserDriver.result = $1;};
+
+module:
+    %empty {$$ = std::make_shared<Module>();}
+|   module function-definition {$$ = std::make_shared<Module>(*$1); $$->functionDefinitions.push_back($2);}
+|   module record-definition {$$ = std::make_shared<Module>(*$1); $$->recordDefinitions.push_back($2);};
+
+record-definition:
+    "struct" ID "{" record-definition-term-declaration-list "}" {$$ = std::make_shared<RecordDefinition>($2, $4);};
+
+record-definition-term-declaration-list:
+    %empty {$$ = {};}
+|   record-definition-term-declaration-list type_ID ";" {$$ = $1; $$.emplace_back($2.first, $2.second);};
+
+type_ID:
+    ID ID {$$ = std::make_pair(std::make_shared<NamedType>($1), $2);}
+|   "+" type_ID {$$ = std::make_pair(std::make_shared<AnnotatedType>($2.first), $2.second);}
+|   "*" type_ID {$$ = std::make_pair(std::make_shared<PtrType>($2.first), $2.second);};
+
+function-definition:
+    function-definition-declarative {$$ = $1;}
+|   function-definition-imperative {$$ = $1;};
+
+function-definition-declarative:
+    ID "(" term-list ")" function-body {$$ = std::make_shared<FunctionDefinitionDeclarative>($1, $3, $5);};
+
+term-list:
+    %empty {$$ = {};}
+|   term {$$ = {$1};}
+|   term-list "," term {$$ = $1; $$.push_back($3);};
+
+term:
+    ID {$$ = std::make_shared<NameReferenceExpression>($1);}
+|   type_ID {$$ = std::make_shared<AtomicTermDefinitionExpression>($1.first, $1.second);}
+|   ID "(" term-list ")" {$$ = std::make_shared<FunctionTermExpression>($1, $3);};
+
+function-definition-imperative:
+    "void" ID "(" term-list ")" function-body {$$ = std::make_shared<FunctionDefinitionImperative>($2, nullptr, $4, $6);}
+|   term "=" ID "(" term-list ")" function-body {$$ = std::make_shared<FunctionDefinitionImperative>($3, $1, $5, $7);};
+
+function-body:
+    function-body-declarative {$$ = $1;}
+|   function-body-imperative {$$ = $1;}
+|   function-body-extern {$$ = $1;};
+
+function-body-declarative:
+    ":-" expr-or-type_ID-list ";" {$$ = std::make_shared<FunctionBodyDeclarative>($2);};
+
+expr-or-type_ID-list:
+    %empty {$$ = {};}
+|   expr-or-type_ID-list-tail {$$ = {$1};};
+
+expr-or-type_ID-list-tail:
+    expr {$$ = {$1};}
+|   type_ID {$$ = {std::make_shared<AtomicTermDefinitionExpression>($1.first, $1.second)};}
+|   expr-or-type_ID-list-tail "," expr {$$ = $1; $$.push_back($3);}
+|   expr-or-type_ID-list-tail "," type_ID {$$ = $1; $$.push_back(std::make_shared<AtomicTermDefinitionExpression>($3.first, $3.second));};
+
+expr:
+    literal-expr {$$ = $1;}
+|   ID {$$ = std::make_shared<NameReferenceExpression>($1);}
+|   "(" type_ID ")" {$$ = std::make_shared<AtomicTermDefinitionExpression>($2.first, $2.second);}
+|   type_ID "=" expr {$$ = std::make_shared<AssignExpression>(std::make_shared<AtomicTermDefinitionExpression>($1.first, $1.second), $3);}
+|   type_ID "===" expr {$$ = std::make_shared<UnifyExpression>(std::make_shared<AtomicTermDefinitionExpression>($1.first, $1.second), $3);}
+|   ID "(" expr-or-type_ID-list ")" {$$ = std::make_shared<FunctionTermExpression>($1, $3);}
+|   "(" expr ")" {$$ = $2;}
+|   expr "===" expr {$$ = std::make_shared<UnifyExpression>($1, $3);}
+|   expr "=" expr {$$ = std::make_shared<AssignExpression>($1, $3);}
+|   "$" expr {$$ = std::make_shared<ExplicitCallExpression>($2);}
+|   "`" expr {$$ = std::make_shared<QuoteExpression>($2);}
+|   expr "||" expr {$$ = std::make_shared<OrExpression>($1, $3);}
+|   expr "&&" expr {$$ = std::make_shared<AndExpression>($1, $3);}
+|   expr "==" expr {$$ = std::make_shared<EqualExpression>($1, $3);}
+|   expr "!=" expr {$$ = std::make_shared<NotEqualExpression>($1, $3);}
+|   expr "<" expr {$$ = std::make_shared<LessExpression>($1, $3);}
+|   expr ">" expr {$$ = std::make_shared<GreaterExpression>($1, $3);}
+|   expr "<=" expr {$$ = std::make_shared<LessOrEqualExpression>($1, $3);}
+|   expr ">=" expr {$$ = std::make_shared<GreaterOrEqualExpression>($1, $3);}
+|   expr "+" expr {$$ = std::make_shared<AddExpression>($1, $3);}
+|   expr "-" expr {$$ = std::make_shared<SubtractExpression>($1, $3);}
+|   expr "*" expr {$$ = std::make_shared<MultiplyExpression>($1, $3);}
+|   expr "/" expr {$$ = std::make_shared<DivideExpression>($1, $3);}
+|   expr "%" expr {$$ = std::make_shared<ModuloExpression>($1, $3);}
+|   "!" expr {$$ = std::make_shared<NotExpression>($2);}
+|   "-" expr %prec UMINUS {$$ = std::make_shared<NegateExpression>($2);}
+|   "*" expr %prec USTAR {$$ = std::make_shared<DereferenceExpression>($2);}
+|   "&" expr {$$ = std::make_shared<AddressOfExpression>($2);}
+|   expr "." ID {$$ = std::make_shared<MemberExpression>($1, $3);};
+
+literal-expr:
+    TRUE {$$ = std::make_shared<BooleanLiteralExpression>(true);}
+|   FALSE {$$ = std::make_shared<BooleanLiteralExpression>(false);}
+|   DECIMAL {$$ = std::make_shared<DecimalLiteralExpression>($1);};
+
+function-body-imperative:
+    "{" statement-list "}" {$$ = std::make_shared<FunctionBodyImperative>($2);};
+
+statement-list:
+    %empty {$$ = {};}
+|   statement-list statement {$$ = $1; $$.push_back($2);};
+
+statement:
+    expr ";" {$$ = std::make_shared<ExpressionStatement>($1);}
+|   type_ID ";" {$$ = std::make_shared<ExpressionStatement>(std::make_shared<AtomicTermDefinitionExpression>($1.first, $1.second));}
+|   statement-if {$$ = $1;}
+|   statement-for {$$ = $1;}
+|   "break" ";" {$$ = std::make_shared<BreakStatement>();}
+|   "continue" ";" {$$ = std::make_shared<ContinueStatement>();};
+
+statement-if:
+    "if" "(" expr ")" "{" statement-list "}" {$$ = std::make_shared<IfStatement>($3, $6);}
+|   "if" "(" expr ")" "{" statement-list "}" "else" "{" statement-list "}" {$$ = std::make_shared<IfStatement>($3, $6, $10);};
+
+statement-for:
+    "for" "(" ";" ";" ")" "{" statement-list "}" {$$ = ForStatementBuilder($7).build();}
+|   "for" "(" expr-or-type_ID-list ";" ";" ")" "{" statement-list "}" {$$ = ForStatementBuilder($8).withInit($3).build();}
+|   "for" "(" ";" expr ";" ")" "{" statement-list "}" {$$ = ForStatementBuilder($8).withCondition($4).build();}
+|   "for" "(" ";" ";" expr-or-type_ID-list ")" "{" statement-list "}" {$$ = ForStatementBuilder($8).withLast($5).build();}
+|   "for" "(" expr-or-type_ID-list ";" expr ";" ")" "{" statement-list "}" {$$ = ForStatementBuilder($9).withInit($3).withCondition($5).build();}
+|   "for" "(" ";" expr ";" expr-or-type_ID-list ")" "{" statement-list "}" {$$ = ForStatementBuilder($9).withCondition($4).withLast($6).build();}
+|   "for" "(" expr-or-type_ID-list ";" ";" expr-or-type_ID-list ")" "{" statement-list "}" {$$ = ForStatementBuilder($9).withInit($3).withLast($6).build();}
+|   "for" "(" expr-or-type_ID-list ";" expr ";" expr-or-type_ID-list ")" "{" statement-list "}" {$$ = ForStatementBuilder($10).withInit($3).withCondition($5).withLast($7).build();};
+
+function-body-extern:
+    "extern" {$$ = std::make_shared<FunctionBodyExtern>(FunctionBodyExtern::Abi::DI);}
+|   "extern" "\"C\"" {$$ = std::make_shared<FunctionBodyExtern>(FunctionBodyExtern::Abi::C);};
+
+%%
