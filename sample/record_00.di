@@ -4,3 +4,5 @@ struct MyRecord
     +int y;
     *+Type z;
 }
+
+struct Type {}

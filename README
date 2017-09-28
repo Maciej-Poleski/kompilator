@@ -1,0 +1,47 @@
+Requirements:
+- C++14 compiler
+- LLVM 4
+- Flex 2.6
+- Bison 3
+
+
+How to build:
+
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make
+
+
+How to use:
+./kompilator SOURCE_FILE
+
+Output file has name SOURCE_FILE + ".o".
+
+Example:
+
+cat <<EOF > main.cpp
+#include <iostream>
+
+extern "C" int add(int, int);
+
+int main() {
+  std::cout << add(5,6) << '\n';
+  return 0;
+}
+EOF
+./kompilator ../sample/simple.di
+g++ ../sample/simple.di.o ../runtime/runtime.cxx main.cpp -o simple
+./simple
+
+
+Compiler takes one optional argument after SOURCE_FILE:
+./kompilator ../sample/simple.di -v
+
+It instructs compiler to dump the whole module LLVM bytecode to stderr.
+Standard object code output file is also generated.
+
+
+Tested with:
+- GCC 6.3
+- LLVM 4

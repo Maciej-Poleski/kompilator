@@ -10,7 +10,7 @@
 class Compiler
 {
 public:
-    explicit Compiler(std::shared_ptr<Module> module, const std::string &name);
+    explicit Compiler(std::shared_ptr<Module> module, const std::string &name, bool dumpLlvm);
 
     bool compile();
 
@@ -24,6 +24,7 @@ private:
     std::shared_ptr<Module> module;
     std::unordered_map<std::string, std::shared_ptr<BuiltinType>> builtinTypes;
     std::string name;
+    bool dumpLlvm;
 };
 
 

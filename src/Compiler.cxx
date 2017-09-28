@@ -10,8 +10,8 @@
 #include "src/ASTVisitors/TypeChecking.hxx"
 #include "src/ASTVisitors/Codegen.hxx"
 
-Compiler::Compiler(std::shared_ptr<Module> module, const std::string &name)
-        : module(module), name(name)
+Compiler::Compiler(std::shared_ptr<Module> module, const std::string &name, bool dumpLlvm)
+        : module(module), name(name), dumpLlvm(dumpLlvm)
 {
     builtinTypes["var"] = std::make_shared<VarType>();
     builtinTypes["int"] = std::make_shared<IntType>();
@@ -22,7 +22,6 @@ Compiler::Compiler(std::shared_ptr<Module> module, const std::string &name)
 
 bool Compiler::compile()
 {
-    module->dump(std::cout);
     if (runAstVisitor<BasicCorrectness>()) {
         return true;
     }
@@ -39,7 +38,7 @@ bool Compiler::compile()
     if (runAstVisitor<TypeChecking>(std::cref(builtinTypes))) {
         return true;
     }
-    if(runAstVisitor<Codegen>(name)) {
+    if (runAstVisitor<Codegen>(name, dumpLlvm)) {
         return true;
     }
     return false;

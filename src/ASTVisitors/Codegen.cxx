@@ -43,8 +43,8 @@ Codegen::State::State(const std::string &moduleId)
 {
 }
 
-Codegen::Codegen(const std::string &moduleId)
-        : state(std::make_shared<State>(moduleId))
+Codegen::Codegen(const std::string &moduleId, bool dumpLlvm)
+        : state(std::make_shared<State>(moduleId)), dumpLlvm(dumpLlvm)
 {
     emitFunctionsListPrototype();
 
@@ -67,8 +67,8 @@ Codegen::Codegen(const std::string &moduleId)
     emitRuntimeAddGoalPrototype();
 }
 
-Codegen::Codegen(std::shared_ptr<Codegen::State> state)
-        : state(state)
+Codegen::Codegen(std::shared_ptr<Codegen::State> state, bool dumpLlvm)
+        : state(state), dumpLlvm(dumpLlvm)
 {
 
 }
@@ -122,8 +122,6 @@ void Codegen::visit(std::shared_ptr<FunctionDefinitionDeclarative> node)
     state->Builder.SetInsertPoint(failedBlock);
     state->Builder.CreateCall(runtimeRollbackToMarkerFunction, {marker});
     state->Builder.CreateRet(state->Builder.getFalse());
-
-    verifyFunction(*function, &llvm::errs());
 }
 
 void Codegen::visit(std::shared_ptr<FunctionDefinitionImperative> node)
@@ -153,6 +151,12 @@ void Codegen::visit(std::shared_ptr<FunctionDefinitionImperative> node)
 
     Value *marker = emitGetSldLogMarker();
 
+    // Result part of term head can be used in the same head
+    Value *functionResultTerm;
+    if (node->result) {
+        functionResultTerm = emitTerm(function, node->result);
+    }
+
     Value *functionHeadTerm = emitTerm(function, std::make_shared<FunctionTermExpression>(node->name, node->terms));
 
     Value *headUnifyResult = state->Builder.CreateCall(runtimeUnifyFunction, {functionHeadTerm, args[0]},
@@ -163,7 +167,6 @@ void Codegen::visit(std::shared_ptr<FunctionDefinitionImperative> node)
     state->Builder.CreateCondBr(headUnifyResult, headUnifiedBlock, failedBlock);
     state->Builder.SetInsertPoint(headUnifiedBlock);
     if (node->result) {
-        Value *functionResultTerm = emitTerm(function, node->result);
         Value *resultUnifyResult = state->Builder.CreateCall(runtimeUnifyFunction, {functionResultTerm, args[1]},
                                                              "result_unification_result");
         BasicBlock *resultUnifiedBlock = BasicBlock::Create(state->TheContext, "result_unified", function);
@@ -190,8 +193,6 @@ void Codegen::visit(std::shared_ptr<FunctionDefinitionImperative> node)
     state->Builder.SetInsertPoint(failedBlock);
     state->Builder.CreateCall(runtimeRollbackToMarkerFunction, {marker});
     state->Builder.CreateRet(state->Builder.getFalse());
-
-    verifyFunction(*function, &llvm::errs());
 }
 
 void Codegen::visit(std::shared_ptr<FunctionBodyDeclarative> node)
@@ -736,8 +737,6 @@ void Codegen::emitFunctionsCExports()
         } else {
             state->Builder.CreateRetVoid();
         }
-
-        verifyFunction(*function, &llvm::errs());
     }
 }
 
@@ -958,7 +957,9 @@ Codegen::~Codegen()
     emitFunctionsListInitializer();
     emitFunctionsExports();
     emitFunctionsCExports();
-    state->TheModule.dump();
+    if(dumpLlvm) {
+        state->TheModule.dump();
+    }
 
     // Initialize the target registry etc.
     InitializeAllTargetInfos();

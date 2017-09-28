@@ -937,11 +937,3 @@ extern "C" void _DI_addGoal(bool (***functions)(UnknownBlob *, UnknownBlob *), U
     sldGoalList.emplace_back(functions, representation);
     sldLog.push_back(std::make_unique<AddGoal>());
 }
-
-extern "C" int add(int, int);
-
-int main()
-{
-    getchar();
-    std::cout << add(5, 6) << '\n';
-}

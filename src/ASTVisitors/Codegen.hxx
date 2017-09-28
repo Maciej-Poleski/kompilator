@@ -24,7 +24,7 @@ class Codegen : public AstVisitorBase, public ErrorCollector
     };
 
 public:
-    explicit Codegen(const std::string &moduleId);
+    explicit Codegen(const std::string &moduleId, bool dumpLlvm);
     ~Codegen();
 
     void visit(std::shared_ptr<FunctionDefinitionDeclarative> node) override;
@@ -44,7 +44,7 @@ public:
     void visit(std::shared_ptr<FunctionBodyExtern> node) override;
 
 //private:
-    explicit Codegen(std::shared_ptr<State> state);
+    explicit Codegen(std::shared_ptr<State> state, bool dumpLlvm);
 
     void emitFunctionsListPrototype();
     void emitFunctionExport(llvm::Function *function, std::shared_ptr<FunctionDefinition> node);
@@ -120,6 +120,8 @@ public:
     std::unordered_map<std::string, std::vector<llvm::Function *>> functionsForName;
     std::unordered_map<std::string, std::vector<std::tuple<llvm::Function *, llvm::FunctionType *, std::shared_ptr<FunctionDefinition>>>> functionsToExportC;
     llvm::GlobalVariable *functionsListVariable;
+
+    bool dumpLlvm;
 };
 
 
